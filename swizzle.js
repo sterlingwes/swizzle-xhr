@@ -1,6 +1,23 @@
-window.swizzleXhr = swizzleXhr;
+window.swizzleXHR = swizzleXHR;
 
-function swizzleXhr({ responseTransform, urlFilter }) {
+/**
+ * @callback ResponseTransform
+ * @param {XMLHttpRequest} activeXhr the current XHR instance
+ */
+
+/**
+ * @typedef {Object} SwizzleOptions
+ * @property {ResponseTransform} responseTransform
+ * @property {RegExp} urlFilter
+ */
+
+/**
+ * swizzleXHR replaces XMLHttpRequest with a proxy that allows for
+ * intercepting & transforming responses
+ *
+ * @param {SwizzleOptions} options
+ */
+function swizzleXHR({ responseTransform, urlFilter }) {
   const _XMLHttpRequest = window.XMLHttpRequest;
 
   return function SwizzledXHR() {

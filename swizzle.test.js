@@ -43,7 +43,7 @@ const xhrRequest = function (url = 'https://some.api') {
   return promise;
 };
 
-describe('swizzleXhr', () => {
+describe('swizzleXHR', () => {
   const mockResponse = '{"hello": "world"}';
 
   describe('transforming', () => {
@@ -51,7 +51,7 @@ describe('swizzleXhr', () => {
 
     beforeEach(() => {
       const responseTransform = (xhr) => transformedResponse;
-      window.XMLHttpRequest = swizzleXhr({ responseTransform });
+      window.XMLHttpRequest = swizzleXHR({ responseTransform });
     });
 
     it('should return the transformed response', async () => {
@@ -66,7 +66,7 @@ describe('swizzleXhr', () => {
 
     beforeEach(() => {
       const responseTransform = (xhr) => transformedResponse;
-      window.XMLHttpRequest = swizzleXhr({ responseTransform, urlFilter });
+      window.XMLHttpRequest = swizzleXHR({ responseTransform, urlFilter });
     });
 
     it('should not return the transformed response', async () => {
