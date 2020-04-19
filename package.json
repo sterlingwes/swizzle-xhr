@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "docs": "jsdoc2md swizzle.js > API.md",
-    "build": "rollup swizzle.js --file swizzle-min.js --format iife --plugin terser",
+    "build": "rollup -c",
     "test": "yarn build && jest"
   },
   "devDependencies": {
