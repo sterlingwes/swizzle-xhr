@@ -39,21 +39,22 @@ function swizzleXHR({ responseTransform, urlFilter }) {
    */
   // @ts-ignore - TS checks don't pickup the Proxy
   return function SwizzledXHR() {
-    let container = this;
     let realXhr = new _XMLHttpRequest();
     let xhrFieldOverrides = {};
+    const originalHandlers = {};
 
     const shouldHandleResponse = () => {
       return responseTransform && (!urlFilter || urlFilter.test(realXhr.responseURL));
     };
 
-    container.applyLoaded = function () {
+    /**
+     * handleResponse invokes the responseTransform when we know the request has finished
+     *
+     * @param {string} handlerName onload or onreadystatechange
+     */
+    const handleResponse = (handlerName) => {
       const activeXhr = this;
-    };
-
-    container.loadHandler = function () {
-      const activeXhr = this;
-      const applyLoaded = () => container.originalLoadHandler.apply(activeXhr, arguments);
+      const applyLoaded = () => originalHandlers[handlerName].apply(activeXhr, arguments);
 
       if (shouldHandleResponse()) {
         Promise.resolve(responseTransform(activeXhr)).then(
@@ -67,6 +68,18 @@ function swizzleXHR({ responseTransform, urlFilter }) {
       }
 
       applyLoaded();
+    };
+
+    const proxiedHandlers = {
+      onload: function () {
+        handleResponse('onload');
+      },
+      onreadystatechange: function () {
+        if (this.readyState === 4) {
+          // 4=DONE request finalized
+          handleResponse('onreadystatechange');
+        }
+      },
     };
 
     const proxyXhr = new Proxy(realXhr, {
@@ -83,10 +96,12 @@ function swizzleXHR({ responseTransform, urlFilter }) {
       },
 
       set: function (target, key, value) {
-        if (key === 'onload') {
-          container.originalLoadHandler = value;
-          return Reflect.set(target, key, container.loadHandler);
+        const proxied = proxiedHandlers[key];
+        if (proxied) {
+          originalHandlers[key] = value;
+          return Reflect.set(target, key, proxied);
         }
+
         return Reflect.set(target, key, value);
       },
     });

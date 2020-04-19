@@ -111,4 +111,30 @@ describe('swizzleXHR', () => {
       expect(response).toEqual(mockResponse);
     });
   });
+
+  describe('w/ legacy ready state listener', () => {
+    const transformedResponse = '{"still": "works"}';
+
+    beforeEach(() => {
+      const responseTransform = () => ({ responseText: transformedResponse });
+      window.XMLHttpRequest = swizzleXHR({ responseTransform });
+    });
+
+    it('should behave the same', (done) => {
+      // usage scenario:
+      const xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = () => {
+        expect(xhttp.responseText).toEqual(transformedResponse);
+        done();
+      };
+
+      xhttp.open('GET', 'https://some.url', true);
+      xhttp.send();
+
+      // event simulation:
+      xhttp.readyState = 4;
+      xhttp.responseText = mockResponse;
+      xhttp.onreadystatechange(); // simulates event, which calls proxy method
+    });
+  });
 });

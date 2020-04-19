@@ -1,7 +1,7 @@
 {
   "name": "swizzle-xhr",
   "description": "Small lib for intercepting & transforming HTTP responses through XMLHttpRequest",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "swizzle-min.js",
   "license": "MIT",
   "scripts": {
