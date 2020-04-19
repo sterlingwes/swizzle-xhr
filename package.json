@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "build": "rollup swizzle.js --file swizzle-min.js --format iife --plugin terser",
-    "test": "jest"
+    "test": "yarn build && jest"
   },
   "devDependencies": {
     "jest": "^25.3.0",

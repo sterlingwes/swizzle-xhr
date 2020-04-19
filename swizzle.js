@@ -1,20 +1,23 @@
 window.swizzleXhr = swizzleXhr;
 
-function swizzleXhr({ responseTransform }) {
+function swizzleXhr({ responseTransform, urlFilter }) {
   const _XMLHttpRequest = window.XMLHttpRequest;
 
   return function SwizzledXHR() {
     let container = this;
+    let realXhr = new _XMLHttpRequest();
+
+    const shouldHandleResponse = () => {
+      return responseTransform && (!urlFilter || urlFilter.test(realXhr.responseURL));
+    };
 
     container.loadHandler = function () {
       const activeXhr = this;
-      if (container.originalLoadHandler) {
+      if (shouldHandleResponse()) {
         container.responseText = responseTransform(activeXhr);
-        container.originalLoadHandler.apply(activeXhr, arguments);
       }
+      container.originalLoadHandler.apply(activeXhr, arguments);
     };
-
-    let realXhr = new _XMLHttpRequest();
 
     const proxyXhr = new Proxy(realXhr, {
       get: function (target, key, receiver) {
