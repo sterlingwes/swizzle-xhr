@@ -1,0 +1,6 @@
+example.html
+*.test.js
+.vscode/
+.prettierrc
+rollup.config.js
+swizzle.js
