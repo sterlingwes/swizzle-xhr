@@ -1,3 +1,5 @@
+// @ts-nocheck lots of mock'n & stub'n happenin' here
+
 const openSpy = jest.fn();
 const sendSpy = jest.fn();
 
@@ -50,7 +52,7 @@ describe('swizzleXHR', () => {
     const transformedResponse = '{"not": "what you expected"}';
 
     beforeEach(() => {
-      const responseTransform = (xhr) => transformedResponse;
+      const responseTransform = () => ({ responseText: transformedResponse });
       window.XMLHttpRequest = swizzleXHR({ responseTransform });
     });
 
@@ -60,12 +62,47 @@ describe('swizzleXHR', () => {
     });
   });
 
+  describe('async transforming', () => {
+    let resolveTransform;
+    const transformedResponse = '{"hi": "i took a while"}';
+    const responseTransform = () =>
+      new Promise((resolve) => {
+        resolveTransform = () => resolve({ responseText: transformedResponse });
+      });
+
+    beforeEach(() => {
+      window.XMLHttpRequest = swizzleXHR({ responseTransform });
+    });
+
+    describe('when not resolved', () => {
+      it('should not call onload', () => {
+        const onloadSpy = jest.fn();
+        const xhttp = new XMLHttpRequest();
+        xhttp.onload = onloadSpy;
+
+        xhttp.open('GET', 'https://some.url', true);
+        xhttp.send();
+
+        expect(onloadSpy).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('when resolved', () => {
+      it('should return the transformed response', async () => {
+        const promise = xhrRequest().mockResponse(mockResponse);
+        resolveTransform();
+        const response = await promise;
+        expect(response).toEqual(transformedResponse);
+      });
+    });
+  });
+
   describe('url filtering', () => {
     const urlFilter = /onlythisapi.com/;
     const transformedResponse = '{"not": "what you expected"}';
 
     beforeEach(() => {
-      const responseTransform = (xhr) => transformedResponse;
+      const responseTransform = () => ({ responseText: transformedResponse });
       window.XMLHttpRequest = swizzleXHR({ responseTransform, urlFilter });
     });
 
