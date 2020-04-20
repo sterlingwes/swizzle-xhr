@@ -19,8 +19,9 @@ window.swizzleXHR = swizzleXHR;
 
 /**
  * @typedef {Object} SwizzleOptions
- * @property {ResponseTransform} responseTransform
- * @property {RegExp} urlFilter
+ * @property {ResponseTransform=} responseTransform
+ * @property {RegExp=} urlFilter
+ * @property {boolean} debug extra logging
  */
 
 /**
@@ -30,8 +31,17 @@ window.swizzleXHR = swizzleXHR;
  * @param {SwizzleOptions} options
  * @returns {XMLHttpRequest} a wrapped instance of XMLHttpRequest via a Proxy
  */
-function swizzleXHR({ responseTransform, urlFilter }) {
+function swizzleXHR({ responseTransform, urlFilter, debug }) {
   const _XMLHttpRequest = window.XMLHttpRequest;
+
+  const sliceArgs = (args) => Array.prototype.slice.call(args, 0);
+
+  const log = function () {
+    if (!debug) return;
+    const args = sliceArgs(arguments);
+    args.unshift('[swizzle-xhr]');
+    console.log.apply(console, args);
+  };
 
   /**
    * SwizzledXHR is a wrapper that represents our replacement XMLHttpRequest "class"
@@ -41,6 +51,7 @@ function swizzleXHR({ responseTransform, urlFilter }) {
   return function SwizzledXHR() {
     let realXhr = new _XMLHttpRequest();
     let xhrFieldOverrides = {};
+    let debugOpenArgs;
     const originalHandlers = {};
 
     const shouldHandleResponse = () => {
@@ -72,9 +83,11 @@ function swizzleXHR({ responseTransform, urlFilter }) {
 
     const proxiedHandlers = {
       onload: function () {
+        log(debugOpenArgs, 'loaded');
         handleResponse('onload');
       },
       onreadystatechange: function () {
+        log(debugOpenArgs, `readyState=${this.readyState}`);
         if (this.readyState === 4) {
           // 4=DONE request finalized
           handleResponse('onreadystatechange');
@@ -83,9 +96,19 @@ function swizzleXHR({ responseTransform, urlFilter }) {
     };
 
     const proxyXhr = new Proxy(realXhr, {
-      get: function (target, key, receiver) {
+      get: function (target, key) {
         if (xhrFieldOverrides[key]) {
           return xhrFieldOverrides[key];
+        }
+
+        if (debug && key === 'open') {
+          return function () {
+            const handlers = `method=${Object.keys(originalHandlers).join(',')}`;
+            const args = sliceArgs(arguments);
+            debugOpenArgs = `${args[0]}:${args[1]}`;
+            log('open', handlers, debugOpenArgs);
+            return target[key].apply(realXhr, arguments);
+          };
         }
 
         if (typeof target[key] === 'function') {
