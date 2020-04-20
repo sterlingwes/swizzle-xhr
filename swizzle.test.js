@@ -137,4 +137,29 @@ describe('swizzleXHR', () => {
       xhttp.onreadystatechange(); // simulates event, which calls proxy method
     });
   });
+
+  describe('w/ addEventListener', () => {
+    const transformedResponse = '{"not": "what you expected"}';
+
+    beforeEach(() => {
+      const responseTransform = () => ({ responseText: transformedResponse });
+      window.XMLHttpRequest = swizzleXHR({ responseTransform });
+    });
+
+    it('should behave the same', (done) => {
+      // usage scenario:
+      const xhttp = new XMLHttpRequest();
+      xhttp.addEventListener('load', () => {
+        expect(xhttp.responseText).toEqual(transformedResponse);
+        done();
+      });
+
+      xhttp.open('GET', 'https://some.url', true);
+      xhttp.send();
+
+      // event simulation:
+      xhttp.responseText = mockResponse;
+      xhttp.onload(); // simulates event, which calls proxy method
+    });
+  });
 });

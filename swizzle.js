@@ -54,6 +54,11 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
     let debugOpenArgs;
     const originalHandlers = {};
 
+    const addHandler = (name, handler) => {
+      if (!originalHandlers[name]) originalHandlers[name] = [];
+      originalHandlers[name].push(handler);
+    };
+
     const shouldHandleResponse = () => {
       return responseTransform && (!urlFilter || urlFilter.test(realXhr.responseURL));
     };
@@ -64,11 +69,13 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
      * @param {string} handlerName onload or onreadystatechange
      */
     const handleResponse = (handlerName) => {
-      const activeXhr = this;
-      const applyLoaded = () => originalHandlers[handlerName].apply(activeXhr, arguments);
+      const applyLoaded = () => {
+        if (!originalHandlers[handlerName]) return;
+        originalHandlers[handlerName].forEach((handler) => handler.apply(realXhr, arguments));
+      };
 
       if (shouldHandleResponse()) {
-        Promise.resolve(responseTransform(activeXhr)).then(
+        Promise.resolve(responseTransform(realXhr)).then(
           /** @param {XMLHttpFieldOverrides} overrides */
           (overrides) => {
             xhrFieldOverrides = overrides;
@@ -101,6 +108,15 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
           return xhrFieldOverrides[key];
         }
 
+        if (key === 'addEventListener') {
+          return function () {
+            const [eventName, handler] = sliceArgs(arguments);
+            const setterName = `on${eventName}`;
+            addHandler(setterName, handler);
+            Reflect.set(target, setterName, proxiedHandlers[setterName]);
+          };
+        }
+
         if (debug && key === 'open') {
           return function () {
             const handlers = `method=${Object.keys(originalHandlers).join(',')}`;
@@ -121,7 +137,7 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
       set: function (target, key, value) {
         const proxied = proxiedHandlers[key];
         if (proxied) {
-          originalHandlers[key] = value;
+          addHandler(key, value);
           return Reflect.set(target, key, proxied);
         }
 
