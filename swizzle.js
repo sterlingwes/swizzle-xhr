@@ -11,6 +11,24 @@ window.swizzleXHR = swizzleXHR;
  * @property {string=} statusText standard response text ie: "200 OK"
  */
 
+const xhrFields = ['responseText', 'responseType', 'responseURL', 'status', 'statusText'];
+
+/**
+ * Ensure only valid XMLHttpRequest fields can be returned from
+ * the responseTransform function
+ *
+ * @param {XMLHttpFieldOverrides} fieldOverrides
+ */
+const pickValidValues = (fieldOverrides) => {
+  const overrides = {};
+  xhrFields.forEach((field) => {
+    if (field in fieldOverrides) {
+      overrides[field] = fieldOverrides[field];
+    }
+  });
+  return overrides;
+};
+
 /**
  * @callback ResponseTransform
  * @param {XMLHttpRequest} activeXhr the current XHR instance
@@ -34,6 +52,7 @@ window.swizzleXHR = swizzleXHR;
 function swizzleXHR({ responseTransform, urlFilter, debug }) {
   const _XMLHttpRequest = window.XMLHttpRequest;
 
+  /** @param {arguments} args */
   const sliceArgs = (args) => Array.prototype.slice.call(args, 0);
 
   const log = function () {
@@ -54,6 +73,10 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
     let debugOpenArgs;
     const originalHandlers = {};
 
+    /**
+     * @param {string} name
+     * @param {function|{ handleEvent: function }} handler
+     */
     const addHandler = (name, handler) => {
       if (!originalHandlers[name]) originalHandlers[name] = [];
       originalHandlers[name].push(handler);
@@ -67,19 +90,40 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
      * handleResponse invokes the responseTransform when we know the request has finished
      *
      * @param {string} handlerName onload or onreadystatechange
+     * @param {Event} evt
      */
-    const handleResponse = (handlerName) => {
+    const handleResponse = (handlerName, evt) => {
       const applyLoaded = () => {
-        if (!originalHandlers[handlerName]) return;
-        originalHandlers[handlerName].forEach((handler) => handler.apply(realXhr, arguments));
+        if (!originalHandlers[handlerName]) {
+          log(`handleResponse called with no handler set for ${handlerName}`);
+          return;
+        }
+
+        originalHandlers[handlerName].forEach((handler) => {
+          if (typeof handler.handleEvent === 'function') {
+            handler.handleEvent(evt);
+            return;
+          }
+
+          if (typeof handler !== 'function') {
+            log('encountered unexpected handler', handlerName, handler);
+            return;
+          }
+
+          handler.call(realXhr, evt);
+        });
       };
 
       if (shouldHandleResponse()) {
         Promise.resolve(responseTransform(realXhr)).then(
           /** @param {XMLHttpFieldOverrides} overrides */
           (overrides) => {
-            xhrFieldOverrides = overrides;
-            applyLoaded();
+            xhrFieldOverrides = pickValidValues(overrides);
+            try {
+              applyLoaded();
+            } catch (e) {
+              log('applyLoaded() encountered error', e);
+            }
           },
         );
         return;
@@ -89,37 +133,51 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
     };
 
     const proxiedHandlers = {
-      onload: function () {
+      onload: function (evt) {
         log(debugOpenArgs, 'loaded');
-        handleResponse('onload');
+        handleResponse('onload', evt);
       },
-      onreadystatechange: function () {
+      onreadystatechange: function (evt) {
         log(debugOpenArgs, `readyState=${this.readyState}`);
         if (this.readyState === 4) {
           // 4=DONE request finalized
-          handleResponse('onreadystatechange');
+          handleResponse('onreadystatechange', evt);
         }
       },
     };
 
+    // set default handlers
+    Object.keys(proxiedHandlers).forEach((key) => {
+      realXhr[key] = proxiedHandlers[key];
+    });
+
     const proxyXhr = new Proxy(realXhr, {
-      get: function (target, key) {
+      get: function (target, key, receiver) {
         if (xhrFieldOverrides[key]) {
           return xhrFieldOverrides[key];
+        }
+
+        if (key === 'response' && xhrFieldOverrides.responseText) {
+          return xhrFieldOverrides.responseText;
         }
 
         if (key === 'addEventListener') {
           return function () {
             const [eventName, handler] = sliceArgs(arguments);
             const setterName = `on${eventName}`;
-            addHandler(setterName, handler);
-            Reflect.set(target, setterName, proxiedHandlers[setterName]);
+            let eventListener = {};
+            if (typeof handler === 'function') {
+              eventListener.handleEvent = handler;
+            }
+            addHandler(setterName, eventListener);
           };
         }
 
         if (debug && key === 'open') {
           return function () {
-            const handlers = `method=${Object.keys(originalHandlers).join(',')}`;
+            const handlers = `method=${
+              Object.keys(originalHandlers).join(',') || 'addEventListener'
+            }`;
             const args = sliceArgs(arguments);
             debugOpenArgs = `${args[0]}:${args[1]}`;
             log('open', handlers, debugOpenArgs);
@@ -127,16 +185,14 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
           };
         }
 
-        if (typeof target[key] === 'function') {
-          return target[key].bind(realXhr);
-        }
-
-        return Reflect.get(target, key);
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
       },
 
       set: function (target, key, value) {
         const proxied = proxiedHandlers[key];
         if (proxied) {
+          // @ts-ignore we know key is a string here
           addHandler(key, value);
           return Reflect.set(target, key, proxied);
         }
