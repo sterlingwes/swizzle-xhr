@@ -51,48 +51,83 @@ describe('swizzleXHR', () => {
   describe('transforming', () => {
     const transformedResponse = '{"not": "what you expected"}';
 
-    beforeEach(() => {
-      const responseTransform = () => ({ responseText: transformedResponse });
-      window.XMLHttpRequest = swizzleXHR({ responseTransform });
+    describe('with a rewritten response', () => {
+      beforeEach(() => {
+        const responseTransform = () => ({ responseText: transformedResponse });
+        window.XMLHttpRequest = swizzleXHR({ responseTransform });
+      });
+
+      it('should return the transformed response', async () => {
+        const response = await xhrRequest().mockResponse(mockResponse);
+        expect(response).toEqual(transformedResponse);
+      });
     });
 
-    it('should return the transformed response', async () => {
-      const response = await xhrRequest().mockResponse(mockResponse);
-      expect(response).toEqual(transformedResponse);
+    describe('with nothing returned', () => {
+      beforeEach(() => {
+        const responseTransform = () => undefined;
+        window.XMLHttpRequest = swizzleXHR({ responseTransform });
+      });
+
+      it('should not blow up & return untransformed values', async () => {
+        const response = await xhrRequest().mockResponse(mockResponse);
+        expect(response).toEqual(mockResponse);
+      });
     });
   });
 
   describe('async transforming', () => {
-    let resolveTransform;
-    const transformedResponse = '{"hi": "i took a while"}';
-    const responseTransform = () =>
-      new Promise((resolve) => {
-        resolveTransform = () => resolve({ responseText: transformedResponse });
+    describe('when transforming the response', () => {
+      let resolveTransform;
+      const transformedResponse = '{"hi": "i took a while"}';
+      const responseTransform = () =>
+        new Promise((resolve) => {
+          resolveTransform = () => resolve({ responseText: transformedResponse });
+        });
+
+      beforeEach(() => {
+        window.XMLHttpRequest = swizzleXHR({ responseTransform });
       });
 
-    beforeEach(() => {
-      window.XMLHttpRequest = swizzleXHR({ responseTransform });
-    });
+      describe('when not resolved', () => {
+        it('should not call onload', () => {
+          const onloadSpy = jest.fn();
+          const xhttp = new XMLHttpRequest();
+          xhttp.onload = onloadSpy;
 
-    describe('when not resolved', () => {
-      it('should not call onload', () => {
-        const onloadSpy = jest.fn();
-        const xhttp = new XMLHttpRequest();
-        xhttp.onload = onloadSpy;
+          xhttp.open('GET', 'https://some.url', true);
+          xhttp.send();
 
-        xhttp.open('GET', 'https://some.url', true);
-        xhttp.send();
+          expect(onloadSpy).not.toHaveBeenCalled();
+        });
+      });
 
-        expect(onloadSpy).not.toHaveBeenCalled();
+      describe('when resolved', () => {
+        it('should return the transformed response', async () => {
+          const promise = xhrRequest().mockResponse(mockResponse);
+          resolveTransform();
+          const response = await promise;
+          expect(response).toEqual(transformedResponse);
+        });
       });
     });
 
-    describe('when resolved', () => {
-      it('should return the transformed response', async () => {
+    describe('when resolving with nothing', () => {
+      let resolveTransform;
+      const responseTransform = () =>
+        new Promise((resolve) => {
+          resolveTransform = () => resolve(null);
+        });
+
+      beforeEach(() => {
+        window.XMLHttpRequest = swizzleXHR({ responseTransform });
+      });
+
+      it('should provide the existing response', async () => {
         const promise = xhrRequest().mockResponse(mockResponse);
         resolveTransform();
         const response = await promise;
-        expect(response).toEqual(transformedResponse);
+        expect(response).toEqual(mockResponse);
       });
     });
   });

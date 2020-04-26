@@ -20,10 +20,11 @@ const xhrFields = ['responseText', 'responseType', 'responseURL', 'status', 'sta
  * @param {XMLHttpFieldOverrides} fieldOverrides
  */
 const pickValidValues = (fieldOverrides) => {
+  const providedOverrides = fieldOverrides || {};
   const overrides = {};
   xhrFields.forEach((field) => {
-    if (field in fieldOverrides) {
-      overrides[field] = fieldOverrides[field];
+    if (field in providedOverrides) {
+      overrides[field] = providedOverrides[field];
     }
   });
   return overrides;
