@@ -72,7 +72,18 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
     let realXhr = new _XMLHttpRequest();
     let xhrFieldOverrides = {};
     let debugOpenArgs;
+    let responsePromise;
     const originalHandlers = {};
+
+    /**
+     * wrap our responseTransform call to avoid calling it twice via
+     * onload & onreadystatechange events
+     */
+    const resolveResponse = () => {
+      if (responsePromise) return responsePromise;
+      responsePromise = Promise.resolve(responseTransform(realXhr));
+      return responsePromise;
+    };
 
     /**
      * @param {string} name
@@ -116,7 +127,7 @@ function swizzleXHR({ responseTransform, urlFilter, debug }) {
       };
 
       if (shouldHandleResponse()) {
-        Promise.resolve(responseTransform(realXhr)).then(
+        resolveResponse().then(
           /** @param {XMLHttpFieldOverrides} overrides */
           (overrides) => {
             xhrFieldOverrides = pickValidValues(overrides);
